@@ -1,0 +1,100 @@
+# Application Configuration
+
+# Camera Settings
+camera:
+  # Source options: 
+  # - 0 (webcam - RECOMMENDED for testing)
+  # - rtsp://url (IP camera)
+  # - http://url/stream.mjpg (HTTP stream)
+  # - path/to/video.mp4 (video file for testing)
+  # 
+  # Note: Most public RTSP streams have restrictions or timeouts
+  # For best results, use your webcam (0) or a local video file
+  source: "0"
+  
+  # Backup sources for testing
+  backup_sources:
+    - "0"  # Webcam fallback
+  
+  fps: 30
+  resolution:
+    width: 640
+    height: 480
+
+# Object Detection Settings
+detection:
+  # YOLOv8 model variant: yolov8n, yolov8s, yolov8m, yolov8l, yolov8x
+  model: "yolov8n"  # Nano - fastest, good for real-time
+  
+  # Confidence threshold (0-1)
+  confidence: 0.5
+  
+  # Detection interval (process every N frames to save resources)
+  frame_interval: 1
+  
+  # Classes to detect (COCO dataset class names)
+  target_classes:
+    - "person"
+  
+  # Classes to ignore
+  ignore_classes:
+    - "bird"
+    - "cat"
+    - "dog"
+  
+  # Size filtering (bounding box area in pixels)
+  min_object_size: 5000  # Minimum area to trigger lights
+  max_object_size: 300000  # Maximum area (ignore if too large)
+
+# Light Control Settings
+lighting:
+  # Control mode: "simulated", "mqtt", "http", "hue"
+  mode: "simulated"
+  
+  # Light intensity levels (0-100)
+  brightness:
+    off: 0
+    low: 30
+    medium: 60
+    high: 100
+  
+  # Default brightness when person detected
+  default_on_brightness: 80
+  
+  # Transition settings
+  fade_duration: 1.0  # seconds
+  debounce_time: 2.0  # seconds - prevent flickering
+  auto_off_delay: 10.0  # seconds - turn off after no detection
+  
+  # MQTT Settings (if mode is "mqtt")
+  mqtt:
+    broker: "localhost"
+    port: 1883
+    topic: "home/lights/control"
+    username: null
+    password: null
+  
+  # HTTP Settings (if mode is "http")
+  http:
+    url: "http://localhost:8000/api/lights"
+    method: "POST"
+  
+  # Philips Hue Settings (if mode is "hue")
+  hue:
+    bridge_ip: "192.168.1.100"
+    username: "your-hue-username"
+    light_ids: [1, 2, 3]
+
+# API Settings
+api:
+  host: "0.0.0.0"
+  port: 8000
+  reload: true
+  log_level: "info"
+
+# Logging
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  save_detections: true
+  detection_log_file: "detections.log"

@@ -1,0 +1,25 @@
+# Core dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# Computer Vision & Object Detection
+opencv-python>=4.8.0
+ultralytics>=8.3.0
+torch>=2.2.0
+torchvision>=0.17.0
+numpy>=1.24.0
+pillow>=10.0.0
+
+# Configuration & Utilities
+pyyaml>=6.0.0
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Optional: For MQTT light control
+paho-mqtt>=1.6.0
+
+# Optional: For smart home APIs
+requests>=2.31.0
+aiohttp>=3.9.0
