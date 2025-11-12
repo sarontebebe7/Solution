@@ -51,7 +51,76 @@ class LightController(ABC):
         self.debounce_time = config.get('debounce_time', 2.0)
         self.auto_off_delay = config.get('auto_off_delay', 10.0)
         
+        # Dynamic brightness settings
+        self.dynamic_config = config.get('dynamic_brightness', {})
+        self.dynamic_enabled = self.dynamic_config.get('enabled', True)
+        self.min_brightness = self.dynamic_config.get('min_brightness', 20)
+        self.max_brightness = self.dynamic_config.get('max_brightness', 100)
+        self.score_threshold = self.dynamic_config.get('score_threshold', 0.05)
+        self.score_ceiling = self.dynamic_config.get('score_ceiling', 0.3)
+        self.class_weights = self.dynamic_config.get('class_weights', {'person': 1.0, 'default': 0.1})
+        
         self.last_detection_time = 0
+    
+    def calculate_brightness_from_detections(self, detections: list, frame_size: tuple) -> int:
+        """
+        Calculate brightness based on detection score
+        
+        Formula: score = sum(confidence_i × relative_area_i × class_weight_i)
+        
+        Args:
+            detections: List of Detection objects with .confidence, .area, .class_name
+            frame_size: Tuple (width, height) of frame for calculating relative area
+        
+        Returns:
+            Brightness value (0-100)
+        """
+        if not self.dynamic_enabled or not detections:
+            return 0
+        
+        # Calculate total frame area
+        frame_width, frame_height = frame_size
+        total_frame_area = frame_width * frame_height
+        
+        # Calculate score
+        score = 0.0
+        for detection in detections:
+            confidence = detection.confidence
+            relative_area = detection.area / total_frame_area
+            
+            # Get class weight (use default if class not in weights)
+            class_weight = self.class_weights.get(
+                detection.class_name, 
+                self.class_weights.get('default', 0.1)
+            )
+            
+            detection_score = confidence * relative_area * class_weight
+            score += detection_score
+            
+            logger.debug(f"Detection score: {detection.class_name} conf={confidence:.2f} "
+                        f"area={relative_area:.4f} weight={class_weight} -> {detection_score:.4f}")
+        
+        logger.info(f"Total detection score: {score:.4f}")
+        
+        # Check if score meets threshold
+        if score < self.score_threshold:
+            return 0
+        
+        # Map score to brightness range [min_brightness, max_brightness]
+        # score_threshold maps to min_brightness
+        # score_ceiling maps to max_brightness
+        normalized_score = min(1.0, (score - self.score_threshold) / 
+                              (self.score_ceiling - self.score_threshold))
+        
+        brightness = int(self.min_brightness + 
+                        normalized_score * (self.max_brightness - self.min_brightness))
+        
+        # Clamp to valid range
+        brightness = max(0, min(100, brightness))
+        
+        logger.info(f"Calculated brightness: {brightness}% (score: {score:.4f}, normalized: {normalized_score:.2f})")
+        
+        return brightness
     
     @abstractmethod
     def set_brightness(self, brightness: int):
@@ -80,8 +149,35 @@ class LightController(ABC):
         self.state = LightState.OFF
         self.set_brightness(0)
     
+    def update_from_detections(self, detections: list, frame_size: tuple):
+        """
+        Update light brightness based on current detections
+        
+        Args:
+            detections: List of Detection objects
+            frame_size: Tuple (width, height) of frame
+        """
+        current_time = time.time()
+        
+        if detections:
+            # Calculate brightness from detections
+            calculated_brightness = self.calculate_brightness_from_detections(detections, frame_size)
+            
+            if calculated_brightness > 0:
+                # Update detection time
+                self.last_detection_time = current_time
+                
+                # Set brightness immediately (no debounce - allow smooth real-time changes)
+                self.target_brightness = calculated_brightness
+                self.state = LightState.ON
+                self.set_brightness(calculated_brightness)
+                self.last_update = current_time
+        else:
+            # No detections - handle auto-off
+            self.on_no_detection()
+    
     def on_object_detected(self):
-        """Called when a target object is detected"""
+        """Called when a target object is detected (DEPRECATED - use update_from_detections)"""
         current_time = time.time()
         
         # Debounce check
