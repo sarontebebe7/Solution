@@ -21,6 +21,43 @@ An intelligent lighting control system that uses YOLOv8 object detection to auto
 
 ## Installation
 
+### Option 1: Using Docker (Recommended for Team/Production)
+
+**Prerequisites:**
+- Docker Desktop installed ([Download](https://www.docker.com/products/docker-desktop/))
+
+**For Team Members - Pull Pre-built Image:**
+
+```powershell
+# Pull the latest image
+docker pull rs735my/smart-lighting-detection:latest
+
+# Run with docker-compose
+docker-compose up
+```
+
+The application will be available at `http://localhost:8000`
+
+**Note:** USB webcams don't work in Docker on Windows. Use IP camera, RTSP stream, or video file. Edit `config.yaml`:
+```yaml
+camera:
+  source: "http://192.168.1.100:8080/video"  # IP Webcam from phone
+  # OR
+  source: "/app/videos/sample.mp4"  # Video file
+```
+
+**For Developers - Build Locally:**
+
+```powershell
+# Build and run
+docker-compose up --build
+
+# Or build without running
+docker build -t smart-lighting-detection .
+```
+
+### Option 2: Native Python Installation (For USB Webcam Development)
+
 1. **Clone or navigate to the project directory**
 
 2. **Create a virtual environment**:
@@ -32,6 +69,12 @@ An intelligent lighting control system that uses YOLOv8 object detection to auto
 3. **Install dependencies**:
    ```powershell
    pip install -r requirements.txt
+   ```
+
+4. **Set camera source in `config.yaml`**:
+   ```yaml
+   camera:
+     source: "0"  # USB webcam works with native Python
    ```
 
 ## Configuration
@@ -147,6 +190,59 @@ lighting:
 - Test with `mode: "simulated"` first
 
 ## Development
+
+### Updating Docker Image (For Maintainers)
+
+When you add new dependencies or make changes:
+
+1. **Update `requirements.txt`** with new packages:
+   ```powershell
+   pip freeze > requirements.txt
+   ```
+
+2. **Rebuild the Docker image**:
+   ```powershell
+   docker-compose build --no-cache
+   ```
+
+3. **Tag the new version**:
+   ```powershell
+   docker tag tmovprojekt-object-detection:latest rs735my/smart-lighting-detection:latest
+   # Or with version number
+   docker tag tmovprojekt-object-detection:latest rs735my/smart-lighting-detection:v1.1
+   ```
+
+4. **Push to Docker Hub**:
+   ```powershell
+   # Login first (if not already)
+   docker login
+   
+   # Push latest
+   docker push rs735my/smart-lighting-detection:latest
+   
+   # Also push versioned tag (recommended)
+   docker push rs735my/smart-lighting-detection:v1.1
+   ```
+
+5. **Notify team members** to pull the new image:
+   ```powershell
+   docker-compose pull
+   docker-compose up
+   ```
+
+### Adding New Python Packages
+
+1. Install package locally:
+   ```powershell
+   pip install package-name
+   ```
+
+2. Update requirements.txt:
+   ```powershell
+   pip freeze > requirements.txt
+   ```
+
+3. Rebuild and push Docker image (steps above)
 
 ### Project Structure
 ```
