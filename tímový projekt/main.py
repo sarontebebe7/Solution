@@ -82,6 +82,11 @@ class MessageResponse(BaseModel):
     success: bool = True
 
 
+class CameraSwitchRequest(BaseModel):
+    """Model for camera switch request"""
+    camera_id: str
+
+
 # Startup event
 @app.on_event("startup")
 async def startup_event():
@@ -387,6 +392,103 @@ async def reset_stats():
     
     video_processor.reset_stats()
     return MessageResponse(message="Statistics reset")
+
+
+@app.get("/camera/list")
+async def list_cameras():
+    """List all available camera sources"""
+    if 'sources' not in config['camera']:
+        return {
+            "message": "No multiple camera sources configured",
+            "current_source": config['camera'].get('source', 'Unknown')
+        }
+    
+    sources = config['camera']['sources']
+    current_source = config['camera'].get('source', '')
+    
+    camera_list = []
+    for camera_id, camera_info in sources.items():
+        camera_list.append({
+            "id": camera_id,
+            "name": camera_info.get('name', camera_id),
+            "url": camera_info.get('url', ''),
+            "is_active": camera_info.get('url') == current_source
+        })
+    
+    return {
+        "cameras": camera_list,
+        "total": len(camera_list)
+    }
+
+
+@app.post("/camera/switch")
+async def switch_camera(request: CameraSwitchRequest):
+    """Switch to a different camera source"""
+    global config, camera, video_processor
+    
+    # Check if multiple sources are configured
+    if 'sources' not in config['camera']:
+        raise HTTPException(
+            status_code=400,
+            detail="Multiple camera sources not configured in config.yaml"
+        )
+    
+    # Validate camera ID
+    camera_id = request.camera_id
+    if camera_id not in config['camera']['sources']:
+        available = list(config['camera']['sources'].keys())
+        raise HTTPException(
+            status_code=404,
+            detail=f"Camera '{camera_id}' not found. Available: {available}"
+        )
+    
+    # Get new camera URL
+    new_camera_url = config['camera']['sources'][camera_id]['url']
+    camera_name = config['camera']['sources'][camera_id].get('name', camera_id)
+    
+    try:
+        # Stop video processing if running
+        was_running = False
+        if video_processor and video_processor.is_running:
+            was_running = True
+            video_processor.stop()
+            logger.info("Stopped video processor for camera switch")
+        
+        # Disconnect old camera
+        if camera:
+            camera.disconnect()
+            logger.info("Disconnected old camera")
+        
+        # Update config
+        config['camera']['source'] = new_camera_url
+        
+        # Initialize new camera
+        camera = CameraStream(config['camera'])
+        if not camera.connect():
+            raise Exception("Failed to connect to new camera source")
+        
+        logger.info(f"Connected to new camera: {camera_name}")
+        
+        # Update video processor with new camera
+        if video_processor:
+            video_processor.camera = camera
+        
+        # Restart video processing if it was running
+        if was_running and video_processor:
+            video_processor.start()
+            logger.info("Restarted video processor with new camera")
+        
+        return {
+            "message": f"Successfully switched to camera: {camera_name}",
+            "camera_id": camera_id,
+            "camera_name": camera_name,
+            "url": new_camera_url,
+            "processing_resumed": was_running
+        }
+    
+    except Exception as e:
+        logger.error(f"Error switching camera: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to switch camera: {str(e)}")
 
 
 @app.get("/health")
