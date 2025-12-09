@@ -18,6 +18,7 @@ from camera import CameraStream
 from detector import ObjectDetector
 from light_controller import create_light_controller
 from video_processor import VideoProcessor
+from multi_camera_processor import MultiCameraProcessor
 from get_youtube_stream import get_youtube_stream_url
 
 # Configure logging
@@ -61,6 +62,8 @@ camera: Optional[CameraStream] = None
 detector: Optional[ObjectDetector] = None
 light_controller = None
 video_processor: Optional[VideoProcessor] = None
+multi_camera_processor: Optional[MultiCameraProcessor] = None
+use_multi_camera = False
 
 
 # Pydantic models for request/response
@@ -98,16 +101,12 @@ class YouTubeStreamRequest(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Initialize components on startup"""
-    global camera, detector, light_controller, video_processor
+    global camera, detector, light_controller, video_processor, multi_camera_processor, use_multi_camera
     
     logger.info("Starting Smart Lighting Control System...")
     
     try:
-        # Initialize camera
-        camera = CameraStream(config['camera'])
-        logger.info("Camera initialized")
-        
-        # Initialize detector
+        # Initialize detector (shared by all cameras)
         detector = ObjectDetector(config['detection'])
         logger.info("Object detector initialized")
         
@@ -115,14 +114,44 @@ async def startup_event():
         light_controller = create_light_controller(config['lighting'])
         logger.info("Light controller initialized")
         
-        # Initialize video processor
-        video_processor = VideoProcessor(
-            camera=camera,
-            detector=detector,
-            light_controller=light_controller,
-            config=config['detection']
-        )
-        logger.info("Video processor initialized")
+        # Check if multi-camera mode is enabled
+        multi_camera_config = config.get('camera', {}).get('multi_camera', {})
+        use_multi_camera = multi_camera_config.get('enabled', False)
+        
+        if use_multi_camera and 'cameras' in multi_camera_config:
+            # Initialize multi-camera processor
+            logger.info("Initializing multi-camera mode...")
+            cameras = {}
+            
+            for camera_id, camera_config in multi_camera_config['cameras'].items():
+                cam_config = {
+                    'source': camera_config['url'],
+                    'fps': config['camera'].get('fps', 30),
+                    'resolution': config['camera'].get('resolution', {'width': 640, 'height': 480})
+                }
+                cameras[camera_id] = CameraStream(cam_config)
+                logger.info(f"Camera {camera_id} ({camera_config['name']}) configured")
+            
+            multi_camera_processor = MultiCameraProcessor(
+                cameras=cameras,
+                detector=detector,
+                light_controller=light_controller,
+                config=config['detection']
+            )
+            logger.info(f"Multi-camera processor initialized with {len(cameras)} cameras")
+        else:
+            # Initialize single camera mode (legacy)
+            logger.info("Initializing single camera mode...")
+            camera = CameraStream(config['camera'])
+            logger.info("Camera initialized")
+            
+            video_processor = VideoProcessor(
+                camera=camera,
+                detector=detector,
+                light_controller=light_controller,
+                config=config['detection']
+            )
+            logger.info("Video processor initialized")
         
         logger.info("System initialization complete")
     
@@ -135,12 +164,16 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    global video_processor, camera
+    global video_processor, multi_camera_processor, camera
     
     logger.info("Shutting down...")
     
-    if video_processor and video_processor.is_running:
-        video_processor.stop()
+    if use_multi_camera and multi_camera_processor:
+        if multi_camera_processor.is_running:
+            multi_camera_processor.stop()
+    elif video_processor:
+        if video_processor.is_running:
+            video_processor.stop()
     
     if camera:
         camera.disconnect()
@@ -190,27 +223,32 @@ async def api_info():
 @app.get("/status")
 async def get_status():
     """Get current system status"""
-    if not video_processor:
+    processor = multi_camera_processor if use_multi_camera else video_processor
+    if not processor:
         raise HTTPException(status_code=503, detail="System not initialized")
     
-    return video_processor.get_status()
+    status = processor.get_status()
+    status['multi_camera_mode'] = use_multi_camera
+    return status
 
 
 @app.post("/start")
 async def start_processing():
     """Start video processing and light control"""
-    if not video_processor:
+    processor = multi_camera_processor if use_multi_camera else video_processor
+    if not processor:
         raise HTTPException(status_code=503, detail="System not initialized")
     
-    if video_processor.is_running:
+    if processor.is_running:
         return MessageResponse(
             message="Video processor already running",
             success=False
         )
     
     try:
-        video_processor.start()
-        return MessageResponse(message="Video processing started")
+        processor.start()
+        mode = "multi-camera" if use_multi_camera else "single camera"
+        return MessageResponse(message=f"Video processing started ({mode} mode)")
     except Exception as e:
         logger.error(f"Error starting video processor: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -219,16 +257,22 @@ async def start_processing():
 @app.post("/stop")
 async def stop_processing():
     """Stop video processing"""
-    if not video_processor:
+    processor = multi_camera_processor if use_multi_camera else video_processor
+    if not processor:
         raise HTTPException(status_code=503, detail="System not initialized")
     
-    if not video_processor.is_running:
+    if not processor.is_running:
         return MessageResponse(
             message="Video processor not running",
             success=False
         )
     
     try:
+        processor.stop()
+        return MessageResponse(message="Video processing stopped")
+    except Exception as e:
+        logger.error(f"Error stopping video processor: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
         video_processor.stop()
         return MessageResponse(message="Video processing stopped")
     except Exception as e:
@@ -239,36 +283,44 @@ async def stop_processing():
 @app.post("/pause")
 async def pause_processing():
     """Pause video processing"""
-    if not video_processor:
+    processor = multi_camera_processor if use_multi_camera else video_processor
+    if not processor:
         raise HTTPException(status_code=503, detail="System not initialized")
     
-    video_processor.pause()
+    processor.pause()
     return MessageResponse(message="Video processing paused")
 
 
 @app.post("/resume")
 async def resume_processing():
     """Resume video processing"""
-    if not video_processor:
+    processor = multi_camera_processor if use_multi_camera else video_processor
+    if not processor:
         raise HTTPException(status_code=503, detail="System not initialized")
     
-    video_processor.resume()
+    processor.resume()
     return MessageResponse(message="Video processing resumed")
 
 
 @app.get("/stream")
 async def video_stream():
     """Stream processed video with detections"""
-    if not video_processor:
+    processor = multi_camera_processor if use_multi_camera else video_processor
+    if not processor:
         raise HTTPException(status_code=503, detail="System not initialized")
     
-    if not video_processor.is_running:
+    if not processor.is_running:
         raise HTTPException(status_code=400, detail="Video processor not running. Start it first with POST /start")
     
     def generate_frames():
         """Generate video frames"""
-        while video_processor.is_running:
-            frame = video_processor.get_latest_frame()
+        while processor.is_running:
+            # Get frame based on mode
+            if use_multi_camera:
+                # For multi-camera, show combined view
+                frame = multi_camera_processor.get_combined_frame()
+            else:
+                frame = video_processor.get_latest_frame()
             
             if frame is not None:
                 # Encode frame as JPEG
@@ -431,10 +483,28 @@ async def list_cameras():
 
 @app.post("/camera/switch")
 async def switch_camera(request: CameraSwitchRequest):
-    """Switch to a different camera source"""
+    """Switch active camera in multi-camera mode or switch source in single mode"""
     global config, camera, video_processor
     
-    # Check if multiple sources are configured
+    camera_id = request.camera_id
+    
+    # Multi-camera mode: just switch which camera to display
+    if use_multi_camera and multi_camera_processor:
+        if camera_id in multi_camera_processor.camera_processors:
+            multi_camera_processor.set_active_camera(camera_id)
+            return {
+                "message": f"Switched to camera: {camera_id}",
+                "camera_id": camera_id,
+                "mode": "multi-camera"
+            }
+        else:
+            available = list(multi_camera_processor.camera_processors.keys())
+            raise HTTPException(
+                status_code=404,
+                detail=f"Camera '{camera_id}' not found. Available: {available}"
+            )
+    
+    # Single camera mode: switch camera source (legacy behavior)
     if 'sources' not in config['camera']:
         raise HTTPException(
             status_code=400,
@@ -442,7 +512,6 @@ async def switch_camera(request: CameraSwitchRequest):
         )
     
     # Validate camera ID
-    camera_id = request.camera_id
     if camera_id not in config['camera']['sources']:
         available = list(config['camera']['sources'].keys())
         raise HTTPException(
@@ -503,7 +572,8 @@ async def switch_camera(request: CameraSwitchRequest):
             "camera_id": camera_id,
             "camera_name": camera_name,
             "camera_type": camera_source_config.get('type', 'standard'),
-            "processing_resumed": was_running
+            "processing_resumed": was_running,
+            "mode": "single-camera"
         }
     
     except Exception as e:

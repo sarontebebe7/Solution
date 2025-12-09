@@ -1,6 +1,9 @@
 services:
   object-detection:
-    image: rs735my/smart-lighting-detection:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: rs735my/smart-lighting-detection:latest
     container_name: smart-lighting-detection
     ports:
       - "8000:8000"

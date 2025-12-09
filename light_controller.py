@@ -220,6 +220,10 @@ class SimulatedLightController(LightController):
         self.last_update = time.time()
         logger.info(f"[SIMULATED] Light brightness set to: {brightness}%")
     
+    def get_current_brightness(self) -> int:
+        """Get current brightness level"""
+        return self.current_brightness
+    
     def get_status(self) -> dict:
         """Get status"""
         return {

@@ -8,7 +8,19 @@ camera:
   resolution:
     height: 480
     width: 640
-  source: rtsp://camera.openlab.kpi.fei.tuke.sk/proxyStream-16
+  source: rtsp://camera.openlab.kpi.fei.tuke.sk/proxyStream-14
+  # Multi-camera configuration
+  multi_camera:
+    enabled: true
+    cameras:
+      camera1:
+        name: "OpenLab Camera 14"
+        url: rtsp://camera.openlab.kpi.fei.tuke.sk/proxyStream-14
+        type: rtsp
+      camera2:
+        name: "OpenLab Camera 22"
+        url: rtsp://camera.openlab.kpi.fei.tuke.sk/proxyStream-22
+        type: rtsp
   sources:
     camera1:
       name: YouTube Stream 1

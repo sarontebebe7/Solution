@@ -249,6 +249,10 @@ class OpenLabLightController:
             "topic": self.topic
         }
     
+    def get_current_brightness(self) -> int:
+        """Get current brightness level"""
+        return self.current_brightness
+    
     def disconnect(self):
         """Disconnect from MQTT broker"""
         try:
