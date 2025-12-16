@@ -1,0 +1,20 @@
+services:
+  object-detection:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # image: rs735my/smart-lighting-detection:latest
+    container_name: smart-lighting-detection
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./videos:/app/videos
+      - yolo-models:/root/.cache/torch/hub/checkpoints
+    environment:
+      - TZ=Europe/Prague
+    restart: unless-stopped
+
+volumes:
+  yolo-models:
+    driver: local

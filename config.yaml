@@ -1,0 +1,112 @@
+api:
+  host: 0.0.0.0
+  log_level: info
+  port: 8000
+  reload: true
+camera:
+  fps: 30
+  resolution:
+    height: 480
+    width: 640
+  source: rtsp://camera.openlab.kpi.fei.tuke.sk/proxyStream-14
+  # Multi-camera configuration
+  multi_camera:
+    enabled: true
+    cameras:
+      camera1:
+        name: "OpenLab Camera 14"
+        url: rtsp://camera.openlab.kpi.fei.tuke.sk/proxyStream-14
+        type: rtsp
+      camera2:
+        name: "OpenLab Camera 22"
+        url: rtsp://camera.openlab.kpi.fei.tuke.sk/proxyStream-22
+        type: rtsp
+  sources:
+    camera1:
+      name: YouTube Stream 1
+      url: https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1764539694/ei/zmgsaf7-BbXo6dsPivKvsA0/ip/78.99.33.114/id/uvNosrM4muQ.1/itag/96/source/yt_live_broadcast/requiressl/yes/ratebypass/yes/live/1/sgoap/gir%3Dyes%3Bitag%3D140/sgovp/gir%3Dyes%3Bitag%3D137/rqh/1/hls_chunk_host/rr4---sn-nav853-3njl.googlevideo.com/xpc/EgVo2aDSNQ%3D%3D/playlist_duration/30/manifest_duration/30/bui/AdEuB5SF5lhqzqDsMlKdho9nd62dwSaoB4A78i2qmK14TMRR_IsbMnyt-OXkntN2cq-x1pjFZHO84Vef/spc/6b0G_BaTw0ztP_qh5HIS/vprv/1/playlist_type/DVR/cps/0/initcwndbps/2480000/met/1764518094,/mh/qE/mm/44/mn/sn-nav853-3njl/ms/lva/mv/m/mvi/4/pl/24/rms/lva,lva/dover/11/pacing/0/keepalive/yes/fexp/51552689,51565116,51565682,51580968/mt/1764517709/sparams/expire,ei,ip,id,itag,source,requiressl,ratebypass,live,sgoap,sgovp,rqh,xpc,playlist_duration,manifest_duration,bui,spc,vprv,playlist_type/sig/AJfQdSswRQIhAJqBL0hYc1ImBbyLg_L7MdjRW-X88fvTGBBBW10R8ngRAiA92tTOinRm3V_LTrI5xlPD1diG0xXCslJfA_xEnPs-8Q%3D%3D/lsparams/hls_chunk_host,cps,initcwndbps,met,mh,mm,mn,ms,mv,mvi,pl,rms/lsig/APaTxxMwRQIgLrUrpRackLYPwaiTE6N3hQxsNs7ZZZ2AHOlGgP4Ec5wCIQD_xYbUm_LTvFiO5qOSOzj111Zk7WzXOxT5l4DfjgdkZQ%3D%3D/playlist/index.m3u8
+    camera2:
+      name: YouTube Stream 2
+      url: https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1764539724/ei/7Ggsaaj1CLKKvdIPhOHJqA4/ip/78.99.33.114/id/_14ivkBzuuI.9/itag/96/source/yt_live_broadcast/requiressl/yes/ratebypass/yes/live/1/sgoap/gir%3Dyes%3Bitag%3D140/sgovp/gir%3Dyes%3Bitag%3D137/rqh/1/hls_chunk_host/rr4---sn-nav853-3njl.googlevideo.com/xpc/EgVo2aDSNQ%3D%3D/playlist_duration/30/manifest_duration/30/bui/AdEuB5R1tdsiFq-gLD7QJbJMM96JpDj3NqOwvE1wHyT0ofvWHzEZ5ypWZ0vNJy5AOnNSNGzG6uKzwKyx/spc/6b0G_JWq1zkltRtyTIV1/vprv/1/playlist_type/DVR/cps/0/initcwndbps/2480000/met/1764518124,/mh/lA/mm/44/mn/sn-nav853-3njl/ms/lva/mv/m/mvi/4/pl/24/rms/lva,lva/dover/11/pacing/0/keepalive/yes/fexp/51552689,51565115,51565681,51580968/mt/1764517709/sparams/expire,ei,ip,id,itag,source,requiressl,ratebypass,live,sgoap,sgovp,rqh,xpc,playlist_duration,manifest_duration,bui,spc,vprv,playlist_type/sig/AJfQdSswRQIgUcuFxPL_Ik2APfdPJjYaI5oGOJF7oBh01xx_r4HHXiQCIQCot73Tw60yEg-DjWltMMPFjLQn8QTpaAAgtSYc8vlkWg%3D%3D/lsparams/hls_chunk_host,cps,initcwndbps,met,mh,mm,mn,ms,mv,mvi,pl,rms/lsig/APaTxxMwRQIgc6t5kJmaiHcXu35o8QL-PBrSW0SLJ-Z6u1aKPKMVVAECIQD0hbhKJN47O8uieuTNQ1YvgtYJGUItsT5MkUVc2xQH2g%3D%3D/playlist/index.m3u8
+    camera3:
+      name: YouTube Stream 3
+      url: https://manifest.googlevideo.com/api/manifest/hls_playlist/expire/1764539959/ei/12ksafPvLbaDi9oP8LeosAw/ip/78.99.33.114/id/lDUm73kwch0.1/itag/96/source/yt_live_broadcast/requiressl/yes/ratebypass/yes/live/1/sgoap/gir%3Dyes%3Bitag%3D140/sgovp/gir%3Dyes%3Bitag%3D137/rqh/1/hls_chunk_host/rr2---sn-nav853-3njl.googlevideo.com/xpc/EgVo2aDSNQ%3D%3D/playlist_duration/30/manifest_duration/30/bui/AdEuB5S8Bkn5NU4iiCaCq-AbRxiBiSlk-oxuQ1P2WBhjEeeQGEU0WvkG-hgj7mSAOOw2AEY3NXZ2i-KO/spc/6b0G_Ig8jz8n_6BB0-Hv/vprv/1/playlist_type/DVR/cps/0/initcwndbps/2640000/met/1764518360,/mh/ot/mm/44/mn/sn-nav853-3njl/ms/lva/mv/m/mvi/2/pl/24/rms/lva,lva/dover/11/pacing/0/keepalive/yes/fexp/51552689,51565116,51565682,51580968/mt/1764517967/sparams/expire,ei,ip,id,itag,source,requiressl,ratebypass,live,sgoap,sgovp,rqh,xpc,playlist_duration,manifest_duration,bui,spc,vprv,playlist_type/sig/AJfQdSswRQIgXjHvFxMNYrJsVRpyEPWrrea6v6Tw_kJFCplHOXBtEucCIQC1OeQ3gTgYlBpTClllw827dE6YMLVZdjLksZrM7Eahrw%3D%3D/lsparams/hls_chunk_host,cps,initcwndbps,met,mh,mm,mn,ms,mv,mvi,pl,rms/lsig/APaTxxMwRgIhAOkek1sPJYyRfTjj3L66wlLu1iZcLIlKeejw-xD7D3-WAiEAldzm6WCqnGhoqAxcHpkJe8Fzm9VwwrmY_5V7No1GnJs%3D/playlist/index.m3u8
+    real_camera:
+      mqtt_broker: openlab.kpi.fei.tuke.sk
+      mqtt_port: 1883
+      name: Real Camera
+      type: mqtt
+      url: rtsp://camera.openlab.kpi.fei.tuke.sk/proxyStream-16
+detection:
+  confidence: 0.5
+  frame_interval: 2
+  ignore_classes:
+  - bird
+  - cat
+  - dog
+  max_object_size: 300000
+  min_object_size: 5000
+  model: yolov8n
+  target_classes:
+  - person
+lighting:
+  mode: openlab  # Changed to openlab for real OpenLab lights
+  auto_off_delay: 5.0
+  brightness:
+    false: 0
+    low: 30
+    medium: 60
+    high: 100
+  debounce_time: 0.1
+  default_on_brightness: 80
+  
+  # Dynamic brightness based on detections
+  dynamic_brightness:
+    enabled: true
+    min_brightness: 10
+    max_brightness: 100
+    score_threshold: 0.001
+    score_ceiling: 0.15
+    class_weights:
+      person: 1.0
+      bicycle: 0.4
+      car: 0.5
+      motorcycle: 0.4
+      truck: 0.5
+      bird: 0.2
+      cat: 0.3
+      dog: 0.3
+      default: 0.1
+  
+  fade_duration: 1000  # milliseconds (epilepsy safe: minimum 250ms)
+  
+  # OpenLab MQTT Configuration (ACTIVE MODE)
+  mqtt:
+    broker: openlab.kpi.fei.tuke.sk
+    port: 1883
+    topic: openlab/lights
+    username: null
+    password: null
+  
+  # OpenLab specific settings
+  min_brightness: 20
+  max_brightness: 100
+  
+  # Legacy configs (not used in openlab mode)
+  http:
+    method: POST
+    url: http://localhost:8000/api/lights
+  hue:
+    bridge_ip: 192.168.1.100
+    light_ids: [1, 2, 3]
+    username: your-hue-username
+  openlab:
+    broker: openlab.kpi.fei.tuke.sk
+    port: 1883
+    control_all: true
+    light_ids: []
+logging:
+  detection_log_file: detections.log
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  level: INFO
+  save_detections: true

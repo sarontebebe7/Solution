@@ -1,6 +1,6 @@
 """
 Camera Stream Handler
-Supports multiple video sources: webcam, IP cameras, RTSP, HTTP streams, video files
+Supports multiple video sources: webcam, IP cameras, RTSP, HTTP streams, video files, MQTT cameras
 """
 
 import cv2
@@ -8,6 +8,16 @@ import numpy as np
 from typing import Optional, Tuple
 import logging
 import time
+import subprocess
+
+# Optional imports
+try:
+    from streamlink import Streamlink
+    STREAMLINK_AVAILABLE = True
+except ImportError:
+    STREAMLINK_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("Streamlink not available, HLS streams may not work")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,6 +32,11 @@ class CameraStream:
         self.backup_sources = config.get('backup_sources', [])
         self.fps = config.get('fps', 30)
         self.resolution = config.get('resolution', {'width': 640, 'height': 480})
+        
+        # MQTT camera support
+        self.is_mqtt_camera = False
+        self.mqtt_broker = None
+        self.mqtt_port = 1883
         
         self.cap: Optional[cv2.VideoCapture] = None
         self.is_opened = False
@@ -42,6 +57,11 @@ class CameraStream:
         logger.info(f"Attempting to connect to camera source: {self.source}")
         
         try:
+            # Check if this is an MQTT camera by looking at config
+            if self._is_mqtt_camera():
+                logger.info("Detected MQTT camera configuration")
+                return self._connect_mqtt_camera()
+            
             # Try main source
             if self._try_connect(self.source):
                 return True
@@ -64,6 +84,109 @@ class CameraStream:
             logger.error(f"Error connecting to camera: {e}")
             return False
     
+    def _is_mqtt_camera(self) -> bool:
+        """Check if the current configuration is for an MQTT camera"""
+        # Check if config has MQTT-specific fields
+        return (self.config.get('type') == 'mqtt' or 
+                'mqtt_broker' in self.config)
+    
+    def _connect_mqtt_camera(self) -> bool:
+        """
+        Connect to MQTT camera and get stream URL
+        
+        Returns:
+            True if successful
+        """
+        try:
+            # Import mqtt_camera module
+            from mqtt_camera import MQTTCameraClient
+            
+            # Get MQTT configuration
+            self.mqtt_broker = self.config.get('mqtt_broker', 'openlab.kpi.fei.tuke.sk')
+            self.mqtt_port = self.config.get('mqtt_port', 1883)
+            
+            logger.info(f"Connecting to MQTT camera via {self.mqtt_broker}:{self.mqtt_port}")
+            
+            # Create MQTT client
+            mqtt_client = MQTTCameraClient(self.mqtt_broker, self.mqtt_port)
+            
+            # Connect to MQTT broker
+            if mqtt_client.connect():
+                logger.info("Successfully connected to MQTT broker")
+                
+                # Get camera stream URL from MQTT or use configured URL
+                stream_url = self.config.get('url')
+                
+                if not stream_url:
+                    # Try to get URL from MQTT
+                    stream_url = mqtt_client.get_camera_stream_url()
+                
+                mqtt_client.disconnect()
+                
+                if stream_url:
+                    logger.info(f"Using MQTT camera stream URL: {stream_url}")
+                    self.source = stream_url
+                    self.is_mqtt_camera = True
+                    
+                    # Now connect to the actual stream
+                    return self._try_connect(stream_url)
+                else:
+                    logger.error("Failed to get camera stream URL from MQTT")
+                    return False
+            else:
+                logger.error("Failed to connect to MQTT broker")
+                # Try to use configured URL as fallback
+                if 'url' in self.config:
+                    logger.info("Attempting to connect using configured URL as fallback")
+                    self.source = self.config['url']
+                    self.is_mqtt_camera = True
+                    return self._try_connect(self.source)
+                return False
+                
+        except ImportError:
+            logger.error("mqtt_camera module not found. Please ensure mqtt_camera.py exists.")
+            return False
+        except Exception as e:
+            logger.error(f"Error connecting to MQTT camera: {e}")
+            return False
+    
+    def _is_hls_url(self, source) -> bool:
+        """Check if source is an HLS stream URL"""
+        if not isinstance(source, str):
+            return False
+        return '.m3u8' in source or 'manifest.googlevideo.com' in source or 'youtube.com' in source or 'youtu.be' in source
+    
+    def _get_streamlink_url(self, source: str) -> Optional[str]:
+        """Get direct stream URL using streamlink for HLS sources"""
+        if not STREAMLINK_AVAILABLE:
+            logger.warning("Streamlink not available, cannot extract HLS stream URL")
+            return None
+            
+        try:
+            logger.info(f"Using streamlink to extract stream URL from: {source}")
+            session = Streamlink()
+            streams = session.streams(source)
+            
+            if not streams:
+                logger.warning(f"No streams found by streamlink for: {source}")
+                return None
+            
+            # Try to get the best quality stream, fallback to any available
+            if 'best' in streams:
+                stream_url = streams['best'].to_url()
+            elif 'worst' in streams:
+                stream_url = streams['worst'].to_url()
+            else:
+                # Get first available stream
+                stream_url = next(iter(streams.values())).to_url()
+            
+            logger.info(f"Streamlink extracted URL: {stream_url[:100]}...")
+            return stream_url
+            
+        except Exception as e:
+            logger.error(f"Streamlink failed to extract stream: {e}")
+            return None
+    
     def _try_connect(self, source) -> bool:
         """
         Try to connect to a specific source
@@ -75,7 +198,30 @@ class CameraStream:
             True if successful
         """
         try:
-            self.cap = cv2.VideoCapture(source)
+            # Check if source is HLS and needs streamlink processing
+            if self._is_hls_url(source):
+                logger.info(f"Detected HLS stream, using streamlink: {source}")
+                stream_url = self._get_streamlink_url(source)
+                if stream_url:
+                    source = stream_url
+                else:
+                    logger.warning("Streamlink failed, trying direct connection anyway")
+            
+            # For RTSP streams, use optimized settings
+            if isinstance(source, str) and source.startswith('rtsp://'):
+                # Use TCP for reliability and set environment variables for minimal latency
+                import os
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000|max_delay;0"
+                self.cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
+            else:
+                self.cap = cv2.VideoCapture(source)
+            
+            # Reduce buffer size to minimize delay (especially for RTSP streams)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            
+            # For RTSP, also set additional low-latency parameters
+            if isinstance(source, str) and source.startswith('rtsp://'):
+                self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
             
             # Wait a bit for connection to establish
             time.sleep(0.5)
@@ -122,6 +268,12 @@ class CameraStream:
             return False, None
         
         try:
+            # For RTSP streams, flush buffer to get latest frame
+            if isinstance(self.source, str) and self.source.startswith('rtsp://'):
+                # Grab multiple frames to clear buffer and get the most recent one
+                for _ in range(3):
+                    self.cap.grab()
+            
             ret, frame = self.cap.read()
             
             if not ret or frame is None:

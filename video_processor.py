@@ -186,7 +186,14 @@ class VideoProcessor:
                     triggered_lights=triggered
                 )
         
-        # Control lights based on detections
+        # Get frame dimensions for relative area calculation
+        frame_height, frame_width = frame.shape[:2]
+        frame_size = (frame_width, frame_height)
+        
+        # Control lights based on detections (dynamic brightness)
+        self.light_controller.update_from_detections(filtered_detections, frame_size)
+        
+        # Log detection if any
         if len(filtered_detections) > 0:
             old_brightness = self.light_controller.current_brightness
             self.light_controller.on_object_detected()

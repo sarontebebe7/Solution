@@ -1,10 +1,11 @@
 """
 Light Controller Module
-Supports multiple lighting control backends: simulated, MQTT, HTTP, Philips Hue
+Supports multiple lighting control backends: simulated, MQTT, HTTP, Philips Hue, OpenLab
 """
 
 import time
 import logging
+import json
 from typing import Optional, Dict
 from abc import ABC, abstractmethod
 import requests
@@ -51,7 +52,76 @@ class LightController(ABC):
         self.debounce_time = config.get('debounce_time', 2.0)
         self.auto_off_delay = config.get('auto_off_delay', 10.0)
         
+        # Dynamic brightness settings
+        self.dynamic_config = config.get('dynamic_brightness', {})
+        self.dynamic_enabled = self.dynamic_config.get('enabled', True)
+        self.min_brightness = self.dynamic_config.get('min_brightness', 20)
+        self.max_brightness = self.dynamic_config.get('max_brightness', 100)
+        self.score_threshold = self.dynamic_config.get('score_threshold', 0.05)
+        self.score_ceiling = self.dynamic_config.get('score_ceiling', 0.3)
+        self.class_weights = self.dynamic_config.get('class_weights', {'person': 1.0, 'default': 0.1})
+        
         self.last_detection_time = 0
+    
+    def calculate_brightness_from_detections(self, detections: list, frame_size: tuple) -> int:
+        """
+        Calculate brightness based on detection score
+        
+        Formula: score = sum(confidence_i × relative_area_i × class_weight_i)
+        
+        Args:
+            detections: List of Detection objects with .confidence, .area, .class_name
+            frame_size: Tuple (width, height) of frame for calculating relative area
+        
+        Returns:
+            Brightness value (0-100)
+        """
+        if not self.dynamic_enabled or not detections:
+            return 0
+        
+        # Calculate total frame area
+        frame_width, frame_height = frame_size
+        total_frame_area = frame_width * frame_height
+        
+        # Calculate score
+        score = 0.0
+        for detection in detections:
+            confidence = detection.confidence
+            relative_area = detection.area / total_frame_area
+            
+            # Get class weight (use default if class not in weights)
+            class_weight = self.class_weights.get(
+                detection.class_name, 
+                self.class_weights.get('default', 0.1)
+            )
+            
+            detection_score = confidence * relative_area * class_weight
+            score += detection_score
+            
+            logger.debug(f"Detection score: {detection.class_name} conf={confidence:.2f} "
+                        f"area={relative_area:.4f} weight={class_weight} -> {detection_score:.4f}")
+        
+        logger.info(f"Total detection score: {score:.4f}")
+        
+        # Check if score meets threshold
+        if score < self.score_threshold:
+            return 0
+        
+        # Map score to brightness range [min_brightness, max_brightness]
+        # score_threshold maps to min_brightness
+        # score_ceiling maps to max_brightness
+        normalized_score = min(1.0, (score - self.score_threshold) / 
+                              (self.score_ceiling - self.score_threshold))
+        
+        brightness = int(self.min_brightness + 
+                        normalized_score * (self.max_brightness - self.min_brightness))
+        
+        # Clamp to valid range
+        brightness = max(0, min(100, brightness))
+        
+        logger.info(f"Calculated brightness: {brightness}% (score: {score:.4f}, normalized: {normalized_score:.2f})")
+        
+        return brightness
     
     @abstractmethod
     def set_brightness(self, brightness: int):
@@ -80,8 +150,35 @@ class LightController(ABC):
         self.state = LightState.OFF
         self.set_brightness(0)
     
+    def update_from_detections(self, detections: list, frame_size: tuple):
+        """
+        Update light brightness based on current detections
+        
+        Args:
+            detections: List of Detection objects
+            frame_size: Tuple (width, height) of frame
+        """
+        current_time = time.time()
+        
+        if detections:
+            # Calculate brightness from detections
+            calculated_brightness = self.calculate_brightness_from_detections(detections, frame_size)
+            
+            if calculated_brightness > 0:
+                # Update detection time
+                self.last_detection_time = current_time
+                
+                # Set brightness immediately (no debounce - allow smooth real-time changes)
+                self.target_brightness = calculated_brightness
+                self.state = LightState.ON
+                self.set_brightness(calculated_brightness)
+                self.last_update = current_time
+        else:
+            # No detections - handle auto-off
+            self.on_no_detection()
+    
     def on_object_detected(self):
-        """Called when a target object is detected"""
+        """Called when a target object is detected (DEPRECATED - use update_from_detections)"""
         current_time = time.time()
         
         # Debounce check
@@ -122,6 +219,10 @@ class SimulatedLightController(LightController):
         self.current_brightness = brightness
         self.last_update = time.time()
         logger.info(f"[SIMULATED] Light brightness set to: {brightness}%")
+    
+    def get_current_brightness(self) -> int:
+        """Get current brightness level"""
+        return self.current_brightness
     
     def get_status(self) -> dict:
         """Get status"""
@@ -301,6 +402,151 @@ class PhilipsHueLightController(LightController):
         }
 
 
+class OpenLabLightController(LightController):
+    """OpenLab MQTT-based light controller for TUKE school lights"""
+    
+    def __init__(self, config: dict):
+        super().__init__(config)
+        
+        if not MQTT_AVAILABLE:
+            raise ImportError("paho-mqtt not installed")
+        
+        # OpenLab specific configuration
+        openlab_config = config.get('openlab', {})
+        self.broker = openlab_config.get('broker', 'openlab.kpi.fei.tuke.sk')
+        self.port = openlab_config.get('port', 1883)
+        self.topic = '/openlab/lights'  # Fixed topic for OpenLab (with leading slash)
+        self.fade_duration_ms = int(config.get('fade_duration', 1.0) * 1000)  # Convert to ms
+        
+        # Light selection
+        self.control_all = openlab_config.get('control_all', True)
+        self.light_ids = openlab_config.get('light_ids', list(range(1, 98)))  # All 97 lights by default
+        
+        # Create MQTT client
+        self.client = mqtt.Client()
+        self.connected = False
+        
+        # Set up callbacks
+        self.client.on_connect = self._on_connect
+        self.client.on_disconnect = self._on_disconnect
+        
+        try:
+            logger.info(f"Connecting to OpenLab MQTT broker: {self.broker}:{self.port}")
+            self.client.connect(self.broker, self.port, 60)
+            self.client.loop_start()
+            logger.info("OpenLab Light Controller initialized")
+        except Exception as e:
+            logger.error(f"Failed to connect to OpenLab MQTT broker: {e}")
+            raise
+    
+    def _on_connect(self, client, userdata, flags, rc):
+        """Callback when connected to MQTT broker"""
+        if rc == 0:
+            self.connected = True
+            logger.info("Connected to OpenLab MQTT broker")
+        else:
+            logger.error(f"Failed to connect to OpenLab MQTT, return code: {rc}")
+            self.connected = False
+    
+    def _on_disconnect(self, client, userdata, rc):
+        """Callback when disconnected from MQTT broker"""
+        self.connected = False
+        logger.info("Disconnected from OpenLab MQTT broker")
+    
+    def _brightness_to_rgbw(self, brightness: int) -> str:
+        """
+        Convert brightness (0-100) to RGBW hex string
+        
+        Args:
+            brightness: Brightness percentage (0-100)
+        
+        Returns:
+            RGBW hex string (e.g., "0000ff00" for white at max)
+        """
+        # Map brightness 0-100 to 0-255
+        white_value = int((brightness / 100.0) * 255)
+        
+        # Format as RGBW: RGB=000000 (off), W=brightness
+        # Using pure white light (W channel only)
+        rgbw = f"000000{white_value:02x}"
+        
+        return rgbw
+    
+    def set_brightness(self, brightness: int):
+        """Set brightness of OpenLab lights via MQTT"""
+        brightness = max(0, min(100, brightness))
+        
+        if not self.connected:
+            logger.warning("Not connected to OpenLab MQTT broker")
+            return
+        
+        try:
+            # Convert brightness to RGBW format
+            rgbw_value = self._brightness_to_rgbw(brightness)
+            
+            # Create MQTT payload
+            if self.control_all:
+                # Control all lights at once
+                payload = {
+                    "all": rgbw_value,
+                    "duration": self.fade_duration_ms
+                }
+            else:
+                # Control specific lights
+                light_dict = {}
+                for light_id in self.light_ids:
+                    light_dict[str(light_id)] = rgbw_value
+                
+                payload = {
+                    "light": light_dict,
+                    "duration": self.fade_duration_ms
+                }
+            
+            # Publish to OpenLab
+            json_payload = json.dumps(payload)
+            logger.info(f"Publishing to {self.topic}: {json_payload}")
+            result = self.client.publish(self.topic, json_payload, qos=0)
+            
+            if result.rc == 0:
+                self.current_brightness = brightness
+                self.last_update = time.time()
+                logger.info(f"✓ OpenLab lights set to {brightness}% (RGBW: {rgbw_value}, duration: {self.fade_duration_ms}ms) - Message sent successfully")
+            else:
+                logger.error(f"✗ Failed to publish to OpenLab MQTT, return code: {result.rc}")
+        
+        except Exception as e:
+            logger.error(f"Error controlling OpenLab lights: {e}")
+    
+    def get_status(self) -> dict:
+        """Get status"""
+        return {
+            "mode": "openlab",
+            "broker": self.broker,
+            "topic": self.topic,
+            "connected": self.connected,
+            "control_all": self.control_all,
+            "num_lights": len(self.light_ids) if not self.control_all else 97,
+            "state": self.state.value,
+            "current_brightness": self.current_brightness,
+            "target_brightness": self.target_brightness,
+            "last_update": self.last_update,
+            "last_detection": self.last_detection_time
+        }
+    
+    def __del__(self):
+        """Cleanup"""
+        if hasattr(self, 'client'):
+            try:
+                # Turn off lights on shutdown
+                logger.info("Shutting down OpenLab lights...")
+                self.turn_off()
+                time.sleep(0.5)  # Give time for message to send
+                self.client.loop_stop()
+                self.client.disconnect()
+            except:
+                pass
+
+
 def create_light_controller(config: dict) -> LightController:
     """
     Factory function to create appropriate light controller
@@ -321,6 +567,10 @@ def create_light_controller(config: dict) -> LightController:
         return HTTPLightController(config)
     elif mode == 'hue':
         return PhilipsHueLightController(config)
+    elif mode == 'openlab':
+        logger.info("🔌 Creating OpenLab MQTT light controller for real OpenLab lights")
+        from openlab_light_controller import OpenLabLightController
+        return OpenLabLightController(config)
     else:
         logger.warning(f"Unknown mode '{mode}', using simulated")
         return SimulatedLightController(config)

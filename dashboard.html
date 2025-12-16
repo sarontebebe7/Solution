@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Lighting Control System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-light: #818cf8;
+            --secondary: #ec4899;
+            --accent: #06b6d4;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg-dark: #0f172a;
+            --bg-medium: #1e293b;
+            --bg-light: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --border: #475569;
+            --shadow: rgba(0, 0, 0, 0.3);
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-medium) 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Intro Animation */
+        #intro-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary) 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            animation: fadeOut 0.8s ease-in-out 3s forwards;
+        }
+
+        @keyframes fadeOut {
+            to {
+                opacity: 0;
+                visibility: hidden;
+            }
+        }
+
+        .intro-logo {
+            font-size: 4rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            animation: logoFloat 2s ease-in-out infinite;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+        }
+
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .intro-text {
+            font-size: 1.5rem;
+            font-weight: 300;
+            letter-spacing: 3px;
+            opacity: 0;
+            animation: fadeIn 1s ease-in-out 0.5s forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+
+        .loading-bar {
+            width: 300px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            margin-top: 2rem;
+            overflow: hidden;
+        }
+
+        .loading-progress {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), white);
+            width: 0;
+            animation: loadProgress 2.5s ease-in-out forwards;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+        }
+
+        @keyframes loadProgress {
+            to { width: 100%; }
+        }
+
+        /* Main Content */
+        #main-content {
+            opacity: 0;
+            animation: contentFadeIn 0.8s ease-in-out 3.2s forwards;
+        }
+
+        @keyframes contentFadeIn {
+            to { opacity: 1; }
+        }
+
+        /* Header */
+        header {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            padding: 1.5rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 20px var(--shadow);
+        }
+
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .logo-text h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-light), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .logo-text p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .status-badge {
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s;
+        }
+
+        .status-badge.active {
+            background: linear-gradient(135deg, var(--success), #059669);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .status-badge.inactive {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: white;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        /* Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Video stream takes full width */
+        .video-section {
+            grid-column: 1 / -1;
+        }
+        
+        /* Stats and controls side by side below video */
+        .bottom-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        @media (max-width: 1024px) {
+            .bottom-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px var(--shadow);
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px var(--shadow);
+            border-color: var(--primary);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .card-title-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        /* Video Stream */
+        .video-container {
+            position: relative;
+            width: 100%;
+            min-height: 600px;
+            background: var(--bg-dark);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px var(--shadow);
+        }
+
+        #videoStream {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.9);
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 0.875rem 2rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #059669);
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.6);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            color: white;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, var(--bg-light), var(--bg-medium));
+            padding: 1.5rem;
+            border-radius: 15px;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-3px);
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-light), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Light Control */
+        .light-control {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .slider-label {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .slider-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-light);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: linear-gradient(90deg, var(--bg-dark), var(--primary));
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.6);
+            transition: all 0.3s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.6);
+            border: none;
+        }
+
+        /* Activity Log */
+        .activity-log {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .activity-log::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .activity-log::-webkit-scrollbar-track {
+            background: var(--bg-dark);
+            border-radius: 4px;
+        }
+
+        .activity-log::-webkit-scrollbar-thumb {
+            background: var(--primary);
+            border-radius: 4px;
+        }
+
+        .activity-item {
+            padding: 1rem;
+            background: var(--bg-dark);
+            border-left: 3px solid var(--primary);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            transition: all 0.3s;
+        }
+
+        .activity-item:hover {
+            transform: translateX(5px);
+            border-left-color: var(--accent);
+        }
+
+        .activity-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .activity-message {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* Notifications */
+        .notification {
+            position: fixed;
+            top: 5rem;
+            right: 2rem;
+            min-width: 300px;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            box-shadow: 0 8px 32px var(--shadow);
+            animation: slideIn 0.3s ease-out;
+            z-index: 1000;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .notification.success {
+            border-left: 4px solid var(--success);
+        }
+
+        .notification.error {
+            border-left: 4px solid var(--danger);
+        }
+
+        .notification.info {
+            border-left: 4px solid var(--accent);
+        }
+
+        /* Camera Selection */
+        .camera-select {
+            width: 100%;
+            padding: 0.875rem;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .camera-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+
+        .camera-select option {
+            background: var(--bg-dark);
+            color: var(--text-primary);
+        }
+
+        /* Full width section */
+        .full-width-section {
+            grid-column: 1 / -1;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 4rem;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--bg-light);
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Intro Screen -->
+    <div id="intro-screen">
+        <div class="intro-logo">💡🎥</div>
+        <div class="intro-text">SMART LIGHTING CONTROL</div>
+        <div class="loading-bar">
+            <div class="loading-progress"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content">
+        <!-- Header -->
+        <header>
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">💡</div>
+                    <div class="logo-text">
+                        <h1>Smart Lighting Control</h1>
+                        <p>AI-Powered Object Detection System</p>
+                    </div>
+                </div>
+                <div class="status-badge inactive" id="systemStatus">
+                    <span class="status-dot"></span>
+                    <span>System Inactive</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Dashboard -->
+        <div class="container">
+            <!-- Video Stream Section - Full Width -->
+            <div class="card video-section">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="card-title-icon">🎥</span>
+                        Multi-Camera Live Stream
+                    </h2>
+                </div>
+                
+                <div class="video-container">
+                    <img id="videoStream" alt="Video Stream" style="display: none;">
+                    <div class="video-overlay" id="videoOverlay">
+                        <div style="text-align: center;">
+                            <div class="spinner" style="margin: 0 auto 1rem;"></div>
+                            <p>Waiting for stream...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn btn-success" id="startBtn" onclick="startProcessing()">
+                        <span>▶️</span> Start Detection
+                    </button>
+                    <button class="btn btn-danger" id="stopBtn" onclick="stopProcessing()" disabled>
+                        <span>⏹️</span> Stop Detection
+                    </button>
+                    <select class="camera-select" id="cameraSelect" onchange="switchCamera()" style="max-width: 300px;">
+                        <option value="">Select Camera Source</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Bottom Panel: Stats and Controls -->
+            <div class="bottom-panel">
+                <!-- Statistics -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <span class="card-title-icon">📊</span>
+                            Detection Statistics
+                        </h2>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">👥 People Detected</div>
+                            <div class="stat-value" id="peopleCount">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">🎯 Total Objects</div>
+                            <div class="stat-value" id="objectCount">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">⚡ FPS</div>
+                            <div class="stat-value" id="fpsValue">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">💡 Light Status</div>
+                            <div class="stat-value" id="lightStatus">OFF</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Light Control -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <span class="card-title-icon">💡</span>
+                            Manual Light Control
+                        </h2>
+                    </div>
+                    
+                    <div class="light-control">
+                        <div class="slider-container">
+                            <div class="slider-header">
+                                <span class="slider-label">🔆 Brightness</span>
+                                <span class="slider-value" id="brightnessValue">0%</span>
+                            </div>
+                            <input type="range" id="brightnessSlider" min="0" max="100" value="0" 
+                                   oninput="updateBrightnessDisplay(this.value)">
+                        </div>
+                        
+                        <div class="controls">
+                            <button class="btn btn-primary" onclick="setLightBrightness()">
+                                <span>✨</span> Apply Brightness
+                            </button>
+                            <button class="btn btn-danger" onclick="turnOffLights()">
+                                <span>🌙</span> Turn Off
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Log -->
+            <div class="card full-width-section">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="card-title-icon">📝</span>
+                        Activity Log
+                    </h2>
+                    <button class="btn btn-primary" onclick="clearLog()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">
+                        Clear Log
+                    </button>
+                </div>
+                <div class="activity-log" id="activityLog">
+                    <div class="activity-item">
+                        <div class="activity-time" id="initTime"></div>
+                        <div class="activity-message">System initialized and ready</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <p>Smart Lighting Control System v1.0 | Powered by YOLOv8 & FastAPI</p>
+        </footer>
+    </div>
+
+    <script>
+        let updateInterval;
+        let streamActive = false;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('initTime').textContent = new Date().toLocaleString();
+            loadCameras();
+            startStatusPolling();
+        });
+
+        // Show notification
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Add activity log
+        function addActivityLog(message) {
+            const log = document.getElementById('activityLog');
+            const item = document.createElement('div');
+            item.className = 'activity-item';
+            item.innerHTML = `
+                <div class="activity-time">${new Date().toLocaleString()}</div>
+                <div class="activity-message">${message}</div>
+            `;
+            log.insertBefore(item, log.firstChild);
+            
+            // Keep only last 20 items
+            while (log.children.length > 20) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // Clear log
+        function clearLog() {
+            const log = document.getElementById('activityLog');
+            log.innerHTML = `
+                <div class="activity-item">
+                    <div class="activity-time">${new Date().toLocaleString()}</div>
+                    <div class="activity-message">Log cleared</div>
+                </div>
+            `;
+        }
+
+        // Load available cameras
+        async function loadCameras() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                const select = document.getElementById('cameraSelect');
+                
+                if (data.available_cameras) {
+                    data.available_cameras.forEach(camera => {
+                        const option = document.createElement('option');
+                        option.value = camera.id;
+                        option.textContent = camera.name;
+                        if (camera.id === data.current_camera) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading cameras:', error);
+            }
+        }
+
+        // Switch camera
+        async function switchCamera() {
+            const cameraId = document.getElementById('cameraSelect').value;
+            if (!cameraId) return;
+            
+            try {
+                const response = await fetch('/camera/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ camera_id: cameraId })
+                });
+                
+                if (response.ok) {
+                    showNotification('Camera switched successfully', 'success');
+                    addActivityLog(`Switched to camera: ${cameraId}`);
+                } else {
+                    showNotification('Failed to switch camera', 'error');
+                }
+            } catch (error) {
+                showNotification('Error switching camera', 'error');
+            }
+        }
+
+        // Start processing
+        async function startProcessing() {
+            try {
+                const response = await fetch('/start', { method: 'POST' });
+                if (response.ok) {
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('videoOverlay').style.display = 'none';
+                    document.getElementById('videoStream').style.display = 'block';
+                    document.getElementById('videoStream').src = '/stream?' + new Date().getTime();
+                    streamActive = true;
+                    
+                    showNotification('Detection started', 'success');
+                    addActivityLog('Object detection system started');
+                    updateSystemStatus(true);
+                } else {
+                    showNotification('Failed to start detection', 'error');
+                }
+            } catch (error) {
+                showNotification('Error starting detection', 'error');
+            }
+        }
+
+        // Stop processing
+        async function stopProcessing() {
+            try {
+                const response = await fetch('/stop', { method: 'POST' });
+                if (response.ok) {
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('stopBtn').disabled = true;
+                    document.getElementById('videoStream').style.display = 'none';
+                    document.getElementById('videoOverlay').style.display = 'flex';
+                    streamActive = false;
+                    
+                    showNotification('Detection stopped', 'info');
+                    addActivityLog('Object detection system stopped');
+                    updateSystemStatus(false);
+                } else {
+                    showNotification('Failed to stop detection', 'error');
+                }
+            } catch (error) {
+                showNotification('Error stopping detection', 'error');
+            }
+        }
+
+        // Update system status badge
+        function updateSystemStatus(active) {
+            const badge = document.getElementById('systemStatus');
+            if (active) {
+                badge.className = 'status-badge active';
+                badge.querySelector('span:last-child').textContent = 'System Active';
+            } else {
+                badge.className = 'status-badge inactive';
+                badge.querySelector('span:last-child').textContent = 'System Inactive';
+            }
+        }
+
+        // Update brightness display
+        function updateBrightnessDisplay(value) {
+            document.getElementById('brightnessValue').textContent = value + '%';
+        }
+
+        // Set light brightness
+        async function setLightBrightness() {
+            const brightness = document.getElementById('brightnessSlider').value;
+            try {
+                const response = await fetch('/lights/brightness', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ brightness: parseInt(brightness) })
+                });
+                
+                if (response.ok) {
+                    showNotification(`Brightness set to ${brightness}%`, 'success');
+                    addActivityLog(`Light brightness adjusted to ${brightness}%`);
+                } else {
+                    showNotification('Failed to set brightness', 'error');
+                }
+            } catch (error) {
+                showNotification('Error setting brightness', 'error');
+            }
+        }
+
+        // Turn off lights
+        async function turnOffLights() {
+            try {
+                const response = await fetch('/lights/off', { method: 'POST' });
+                if (response.ok) {
+                    document.getElementById('brightnessSlider').value = 0;
+                    updateBrightnessDisplay(0);
+                    showNotification('Lights turned off', 'success');
+                    addActivityLog('Lights turned off manually');
+                } else {
+                    showNotification('Failed to turn off lights', 'error');
+                }
+            } catch (error) {
+                showNotification('Error turning off lights', 'error');
+            }
+        }
+
+        // Poll status updates
+        function startStatusPolling() {
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/status');
+                    const data = await response.json();
+                    
+                    // Update stats
+                    document.getElementById('peopleCount').textContent = data.people_count || 0;
+                    document.getElementById('objectCount').textContent = data.total_objects || 0;
+                    document.getElementById('fpsValue').textContent = (data.fps || 0).toFixed(1);
+                    
+                    // Update light status
+                    const lightStatus = data.light_brightness > 0 ? 
+                        `${data.light_brightness}%` : 'OFF';
+                    document.getElementById('lightStatus').textContent = lightStatus;
+                    
+                    // Update system status
+                    if (data.running && !streamActive) {
+                        updateSystemStatus(true);
+                        document.getElementById('startBtn').disabled = true;
+                        document.getElementById('stopBtn').disabled = false;
+                    }
+                } catch (error) {
+                    console.error('Error fetching status:', error);
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

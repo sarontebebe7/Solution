@@ -20,6 +20,10 @@ pydantic-settings>=2.1.0
 # Database
 sqlalchemy>=2.0.0
 
+# YouTube stream extraction
+yt-dlp>=2023.0.0
+streamlink>=6.0.0
+
 # Optional: For MQTT light control
 paho-mqtt>=1.6.0
 
