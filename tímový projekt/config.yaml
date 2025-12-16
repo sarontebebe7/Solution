@@ -98,3 +98,15 @@ logging:
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
   save_detections: true
   detection_log_file: "detections.log"
+
+# Database Settings
+database:
+  enabled: true
+  url: "sqlite:///smart_lighting.db"  # SQLite database file
+  # For PostgreSQL: "postgresql://user:password@localhost/smart_lighting"
+  # For MySQL: "mysql+pymysql://user:password@localhost/smart_lighting"
+  
+  # Data retention
+  cleanup_enabled: true
+  days_to_keep: 30  # Delete data older than 30 days
+  cleanup_interval_hours: 24  # Run cleanup every 24 hours

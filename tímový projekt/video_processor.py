@@ -23,11 +23,12 @@ class VideoProcessor:
     """Main video processing service"""
     
     def __init__(self, camera: CameraStream, detector: ObjectDetector, 
-                 light_controller: LightController, config: dict):
+                 light_controller: LightController, config: dict, database=None):
         self.camera = camera
         self.detector = detector
         self.light_controller = light_controller
         self.config = config
+        self.database = database  # Database manager (optional)
         
         self.is_running = False
         self.is_paused = False
@@ -175,14 +176,48 @@ class VideoProcessor:
         self.stats['total_detections'] += len(all_detections)
         self.stats['trigger_detections'] += len(filtered_detections)
         
+        # Log all detections to database
+        if self.database and len(all_detections) > 0:
+            for detection in all_detections:
+                triggered = detection in filtered_detections
+                self.database.log_detection(
+                    detection=detection.to_dict(),
+                    frame_number=self.stats['frames_processed'],
+                    triggered_lights=triggered
+                )
+        
         # Control lights based on detections
         if len(filtered_detections) > 0:
+            old_brightness = self.light_controller.current_brightness
             self.light_controller.on_object_detected()
+            new_brightness = self.light_controller.current_brightness
+            
+            # Log light change to database
+            if self.database and old_brightness != new_brightness:
+                self.database.log_light_event(
+                    action='on' if new_brightness > 0 else 'off',
+                    brightness_before=old_brightness,
+                    brightness_after=new_brightness,
+                    trigger_type='detection',
+                    trigger_source=f"frame_{self.stats['frames_processed']}"
+                )
             
             # Log detection
             self._log_detection(filtered_detections)
         else:
+            old_brightness = self.light_controller.current_brightness
             self.light_controller.on_no_detection()
+            new_brightness = self.light_controller.current_brightness
+            
+            # Log light change to database
+            if self.database and old_brightness != new_brightness:
+                self.database.log_light_event(
+                    action='auto_off' if new_brightness == 0 else 'dim',
+                    brightness_before=old_brightness,
+                    brightness_after=new_brightness,
+                    trigger_type='auto_off',
+                    trigger_source='no_detection'
+                )
         
         # Get current brightness for display
         current_brightness = self.light_controller.current_brightness

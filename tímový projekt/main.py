@@ -18,6 +18,7 @@ from camera import CameraStream
 from detector import ObjectDetector
 from light_controller import create_light_controller
 from video_processor import VideoProcessor
+from database import init_database, get_db
 
 # Configure logging
 logging.basicConfig(
@@ -60,6 +61,7 @@ camera: Optional[CameraStream] = None
 detector: Optional[ObjectDetector] = None
 light_controller = None
 video_processor: Optional[VideoProcessor] = None
+db = None  # Database manager
 
 
 # Pydantic models for request/response
@@ -86,11 +88,20 @@ class MessageResponse(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Initialize components on startup"""
-    global camera, detector, light_controller, video_processor
+    global camera, detector, light_controller, video_processor, db
     
     logger.info("Starting Smart Lighting Control System...")
     
     try:
+        # Initialize database
+        if config.get('database', {}).get('enabled', True):
+            db_url = config.get('database', {}).get('url', 'sqlite:///smart_lighting.db')
+            db = init_database(db_url)
+            logger.info("Database initialized")
+            
+            # Start system session
+            db.start_session(config)
+        
         # Initialize camera
         camera = CameraStream(config['camera'])
         logger.info("Camera initialized")
@@ -108,7 +119,8 @@ async def startup_event():
             camera=camera,
             detector=detector,
             light_controller=light_controller,
-            config=config['detection']
+            config=config['detection'],
+            database=db  # Pass database to video processor
         )
         logger.info("Video processor initialized")
         
@@ -123,12 +135,18 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
-    global video_processor, camera
+    global video_processor, camera, db
     
     logger.info("Shutting down...")
     
     if video_processor and video_processor.is_running:
         video_processor.stop()
+    
+    # End database session
+    if db:
+        stats = video_processor.stats if video_processor else None
+        db.end_session(stats)
+        logger.info("Database session ended")
     
     if camera:
         camera.disconnect()
@@ -191,6 +209,9 @@ async def start_processing():
         raise HTTPException(status_code=503, detail="System not initialized")
     
     if video_processor.is_running:
+        if db:
+            db.log_user_action('start', 'Attempted to start already running processor', 
+                             endpoint='/start', success=False)
         return MessageResponse(
             message="Video processor already running",
             success=False
@@ -198,9 +219,14 @@ async def start_processing():
     
     try:
         video_processor.start()
+        if db:
+            db.log_user_action('start', 'Started video processing', endpoint='/start')
         return MessageResponse(message="Video processing started")
     except Exception as e:
         logger.error(f"Error starting video processor: {e}")
+        if db:
+            db.log_user_action('start', 'Failed to start video processing', 
+                             endpoint='/start', success=False, error_message=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -211,6 +237,9 @@ async def stop_processing():
         raise HTTPException(status_code=503, detail="System not initialized")
     
     if not video_processor.is_running:
+        if db:
+            db.log_user_action('stop', 'Attempted to stop already stopped processor',
+                             endpoint='/stop', success=False)
         return MessageResponse(
             message="Video processor not running",
             success=False
@@ -218,9 +247,14 @@ async def stop_processing():
     
     try:
         video_processor.stop()
+        if db:
+            db.log_user_action('stop', 'Stopped video processing', endpoint='/stop')
         return MessageResponse(message="Video processing stopped")
     except Exception as e:
         logger.error(f"Error stopping video processor: {e}")
+        if db:
+            db.log_user_action('stop', 'Failed to stop video processing',
+                             endpoint='/stop', success=False, error_message=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -411,6 +445,116 @@ async def health_check():
         health_status["status"] = "degraded"
     
     return health_status
+
+
+# Database API Endpoints
+
+@app.get("/db/stats")
+async def get_database_stats():
+    """Get comprehensive database statistics"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        return db.get_dashboard_stats()
+    except Exception as e:
+        logger.error(f"Error getting database stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/db/detections")
+async def get_detections(limit: int = 100, triggered_only: bool = False):
+    """Get recent detection events"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        detections = db.get_recent_detections(limit=limit, triggered_only=triggered_only)
+        return {
+            "count": len(detections),
+            "detections": detections
+        }
+    except Exception as e:
+        logger.error(f"Error getting detections: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/db/detections/stats")
+async def get_detection_statistics(hours: int = 24):
+    """Get detection statistics for the last N hours"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        return db.get_detection_stats(hours=hours)
+    except Exception as e:
+        logger.error(f"Error getting detection stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/db/lights")
+async def get_light_events(limit: int = 100):
+    """Get recent light control events"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        events = db.get_recent_light_events(limit=limit)
+        return {
+            "count": len(events),
+            "events": events
+        }
+    except Exception as e:
+        logger.error(f"Error getting light events: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/db/sessions")
+async def get_session_history(limit: int = 50):
+    """Get system session history"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        sessions = db.get_session_history(limit=limit)
+        return {
+            "count": len(sessions),
+            "sessions": sessions
+        }
+    except Exception as e:
+        logger.error(f"Error getting sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/db/user-actions")
+async def get_user_action_history(limit: int = 100):
+    """Get user action history"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        actions = db.get_user_actions(limit=limit)
+        return {
+            "count": len(actions),
+            "actions": actions
+        }
+    except Exception as e:
+        logger.error(f"Error getting user actions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/db/cleanup")
+async def cleanup_old_data(days_to_keep: int = 30):
+    """Manually trigger database cleanup"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        db.cleanup_old_data(days_to_keep=days_to_keep)
+        return MessageResponse(message=f"Cleaned up data older than {days_to_keep} days")
+    except Exception as e:
+        logger.error(f"Error cleaning up data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Main entry point
