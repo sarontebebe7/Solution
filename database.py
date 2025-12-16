@@ -152,6 +152,38 @@ class UserAction(Base):
         }
 
 
+class SensorReading(Base):
+    """Records IoT sensor readings for future integration"""
+    __tablename__ = 'sensor_readings'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    # Sensor identification
+    sensor_id = Column(String(100), nullable=False, index=True)  # e.g., "temp_sensor_01"
+    sensor_type = Column(String(50), nullable=False, index=True)  # e.g., "temperature", "humidity", "motion", "light"
+    location = Column(String(100))  # e.g., "living_room", "bedroom"
+    
+    # Reading data
+    value = Column(Float, nullable=False)  # The actual sensor reading
+    unit = Column(String(20))  # e.g., "celsius", "percent", "lux", "ppm"
+    
+    # Additional metadata
+    extra_data = Column(JSON, nullable=True)  # Any extra sensor-specific data
+    
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'timestamp': self.timestamp.isoformat(),
+            'sensor_id': self.sensor_id,
+            'sensor_type': self.sensor_type,
+            'location': self.location,
+            'value': self.value,
+            'unit': self.unit,
+            'extra_data': self.extra_data
+        }
+
+
 # Database Manager
 
 class DatabaseManager:
@@ -416,6 +448,81 @@ class DatabaseManager:
                 UserAction.timestamp.desc()
             ).limit(limit).all()
             return [a.to_dict() for a in actions]
+        finally:
+            session.close()
+    
+    # Sensor Reading Operations
+    
+    def log_sensor_reading(self, sensor_id: str, sensor_type: str, value: float,
+                          unit: Optional[str] = None, location: Optional[str] = None,
+                          extra_data: Optional[dict] = None) -> int:
+        """Log a sensor reading for future IoT integration"""
+        session = self.get_session()
+        try:
+            reading = SensorReading(
+                sensor_id=sensor_id,
+                sensor_type=sensor_type,
+                value=value,
+                unit=unit,
+                location=location,
+                extra_data=extra_data
+            )
+            session.add(reading)
+            session.commit()
+            reading_id = reading.id
+            logger.debug(f"Logged sensor reading {reading_id}: {sensor_type}={value}{unit or ''}")
+            return reading_id
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Error logging sensor reading: {e}")
+            return -1
+        finally:
+            session.close()
+    
+    def get_sensor_readings(self, sensor_type: Optional[str] = None, 
+                           sensor_id: Optional[str] = None,
+                           limit: int = 100) -> List[Dict]:
+        """Get recent sensor readings with optional filtering"""
+        session = self.get_session()
+        try:
+            query = session.query(SensorReading)
+            
+            if sensor_type:
+                query = query.filter(SensorReading.sensor_type == sensor_type)
+            if sensor_id:
+                query = query.filter(SensorReading.sensor_id == sensor_id)
+            
+            readings = query.order_by(SensorReading.timestamp.desc()).limit(limit).all()
+            return [r.to_dict() for r in readings]
+        finally:
+            session.close()
+    
+    def get_sensor_stats(self, sensor_type: str, hours: int = 24) -> Dict[str, Any]:
+        """Get statistics for a specific sensor type over time period"""
+        from datetime import timedelta
+        
+        session = self.get_session()
+        try:
+            cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+            
+            readings = session.query(SensorReading).filter(
+                SensorReading.sensor_type == sensor_type,
+                SensorReading.timestamp >= cutoff_time
+            ).all()
+            
+            if not readings:
+                return {'sensor_type': sensor_type, 'count': 0}
+            
+            values = [r.value for r in readings]
+            return {
+                'sensor_type': sensor_type,
+                'count': len(readings),
+                'min': min(values),
+                'max': max(values),
+                'avg': sum(values) / len(values),
+                'latest': readings[0].to_dict(),
+                'period_hours': hours
+            }
         finally:
             session.close()
     

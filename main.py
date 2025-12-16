@@ -557,6 +557,66 @@ async def cleanup_old_data(days_to_keep: int = 30):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Sensor Data Endpoints (for future IoT integration)
+
+@app.post("/sensors/reading")
+async def log_sensor_data(sensor_id: str, sensor_type: str, value: float,
+                         unit: Optional[str] = None, location: Optional[str] = None):
+    """Log a sensor reading (for future IoT device integration)"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        reading_id = db.log_sensor_reading(
+            sensor_id=sensor_id,
+            sensor_type=sensor_type,
+            value=value,
+            unit=unit,
+            location=location
+        )
+        return {"reading_id": reading_id, "message": "Sensor reading logged"}
+    except Exception as e:
+        logger.error(f"Error logging sensor reading: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sensors/readings")
+async def get_sensor_readings(sensor_type: Optional[str] = None, 
+                             sensor_id: Optional[str] = None,
+                             limit: int = 100):
+    """Get sensor readings with optional filtering"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        readings = db.get_sensor_readings(
+            sensor_type=sensor_type,
+            sensor_id=sensor_id,
+            limit=limit
+        )
+        return {
+            "count": len(readings),
+            "readings": readings
+        }
+    except Exception as e:
+        logger.error(f"Error getting sensor readings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sensors/stats/{sensor_type}")
+async def get_sensor_statistics(sensor_type: str, hours: int = 24):
+    """Get statistics for a specific sensor type"""
+    if not db:
+        raise HTTPException(status_code=503, detail="Database not enabled")
+    
+    try:
+        stats = db.get_sensor_stats(sensor_type=sensor_type, hours=hours)
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting sensor stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Main entry point
 if __name__ == "__main__":
     api_config = config.get('api', {})
